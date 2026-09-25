@@ -29,6 +29,12 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
+      # `npm publish` runs `prepack`, which runs the smoke suite, which imports
+      # @deepseek-ai/dsh-tools. Without installing devDependencies that import
+      # fails and the publish never starts.
+      - name: Install dependencies
+        run: npm ci
+
       # setup-node's registry-url writes an .npmrc auth line; remove it so the
       # publish is unambiguously authenticated by OIDC rather than by a token.
       - name: Drop any token auth written by setup-node
