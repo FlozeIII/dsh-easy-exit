@@ -1,5 +1,7 @@
 # dsh-easy-exit
 
+English | [中文](README.zh.md)
+
 Conveniently shut down the `dsh web` server: a **conversation-header exit button** and an **agent tool**, both
 wired to the launcher's own bounded shutdown path.
 
