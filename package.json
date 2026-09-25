@@ -1,7 +1,6 @@
 {
   "name": "dsh-easy-exit",
   "version": "0.1.0",
-  "private": true,
   "description": "Conveniently shut down the dsh web server: a conversation-header exit button plus an agent tool, using the launcher's bounded shutdown path.",
   "license": "MIT",
   "author": "FlozeIII",
@@ -19,7 +18,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node smoke.mjs"
+    "test": "node smoke.mjs",
+    "prepack": "node smoke.mjs"
   },
   "repository": {
     "type": "git",

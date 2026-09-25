@@ -112,7 +112,46 @@ fence rather than failing open.
 
 The client half must be a **classic script** loaded through `window.__ModuleLoader__.load({ id, factory })` — no
 `import`/`export`, and `require` resolves only against the shell's frozen module table (React, Cordis, static UI
-libraries). It registers into the session-scoped `conversation.session.header.utilities` slot, whose occupants receive\nno owner props — hence the translate function arrives through the register inject factory.
+libraries). It registers into the session-scoped `conversation.session.header.utilities` slot, whose occupants
+receive no owner props — hence the translate function arrives through the register inject factory.
+
+## Install
+
+```sh
+# from npm
+dsh plugin --profile web add dsh-easy-exit
+
+# or straight from the repository
+dsh plugin --profile web add github:FlozeIII/dsh-easy-exit
+```
+
+Restart `dsh web` afterwards: the host half mounts immediately, but the browser bundle is resolved when the package
+loads.
+
+Users on a registry mirror should keep it — `dsh-easy-exit` is a plain public package and installs fine from a
+mirror. Only the release itself must go to the registry of record; see [Releasing](#releasing).
+
+## Releasing
+
+`npm publish` goes to whatever `registry` npm is configured with, and a mirror such as
+`https://registry.npmmirror.com/` is a read-through cache that rejects publishes. So publish to the registry of
+record explicitly, rather than trusting the local configuration:
+
+```sh
+npm login --registry=https://registry.npmjs.org/
+npm publish --registry=https://registry.npmjs.org/
+```
+
+`prepack` runs the test suite, so a failing suite blocks both `npm pack` and `npm publish` — verified by making the
+suite exit non-zero and watching `npm pack` propagate that exit code.
+
+After publishing, bump the version, commit, and tag:
+
+```sh
+npm version patch --no-git-tag-version   # or minor / major
+git commit -am "chore: release x.y.z"
+git tag vx.y.z && git push --follow-tags
+```
 
 ## Install (development)
 
