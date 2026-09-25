@@ -134,18 +134,15 @@ package load, so the button needs a **restart of `dsh web`** (then a page refres
 
 ## Verify
 
-`smoke.mjs` imports `@deepseek-ai/dsh-tools` at runtime (it must go through `defineTool`), so a fresh clone has to
-make that package resolvable before the tests run — the host provides it at runtime, but nothing installs it for
-you:
+The suite is self-contained: `@deepseek-ai/dsh-tools` is a pinned devDependency (the host supplies it at runtime, so
+it is a `peerDependency` for consumers and a `devDependency` here).
 
 ```powershell
-# point node_modules at your DSH install once, then tests run offline
-$dsh = "$env:APPDATA\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-tools"
-New-Item -ItemType Directory -Force "$PWD\node_modules\@deepseek-ai" | Out-Null
-New-Item -ItemType Junction "$PWD\node_modules\@deepseek-ai\dsh-tools" -Target $dsh
-
+npm ci
 npm test                        # 52 host-half assertions, no DSH runtime needed
 ```
+
+`npm test` runs on every push through the [test workflow](.github/workflows/test.yml).
 
 Live checks need a throwaway instance — never the one you are using:
 

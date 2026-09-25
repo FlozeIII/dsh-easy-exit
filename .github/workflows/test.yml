@@ -1,0 +1,20 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    # The suite is verified on Windows, the platform the plugin is developed on.
+    # Narrow this to ubuntu-latest once the hosted run is green there too.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
