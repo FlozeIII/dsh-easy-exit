@@ -1,18 +1,26 @@
 /**
- * Verify the client bundle is actually served and carries the registration.
+ * Verify the client bundle is served and carries the CURRENT registration.
  *
  * Usage: node verify-client.mjs <port> <token>
+ *
+ * A combo script concatenates every plugin of a browser row, so testing for a
+ * slot name anywhere in the body is meaningless: another plugin (for example
+ * @linxin666/dsh-remote-web-ui) registers 'sidebar.footer.action' and puts that
+ * literal in the same body. This therefore anchors on our own register object.
  */
 
 const port = process.argv[2] ?? '3099'
 const token = process.argv[3]
+if (!token) {
+  console.error('usage: node verify-client.mjs <port> <token>')
+  process.exit(2)
+}
 const base = `http://127.0.0.1:${port}`
 
 const exchange = await fetch(`${base}/?token=${encodeURIComponent(token)}`, { redirect: 'manual' })
 const cookie = (exchange.headers.getSetCookie?.() ?? []).map(c => c.split(';')[0]).join('; ')
 const html = await (await fetch(`${base}/`, { headers: { cookie } })).text()
 
-// Combo URLs live in the document; find the one carrying our package.
 const rows = [...html.matchAll(/["']([^"']*plugins\/\?\?[^"']+)["']/g)].map(m => m[1].replaceAll('&amp;', '&'))
 const row = rows.find(r => r.includes('dsh-easy-exit'))
 console.log('combo row found        :', row !== undefined)
@@ -21,12 +29,28 @@ if (!row) {
   process.exit(1)
 }
 
-const path = row.startsWith('http') ? row : row.startsWith('/') ? row : new URL(row, `${base}/`).pathname + new URL(row, `${base}/`).search
-const body = await (await fetch(`${base}${path}`, { headers: { cookie } })).text()
+const url = new URL(row, `${base}/`)
+const body = await (await fetch(`${base}${url.pathname}${url.search}`, { headers: { cookie } })).text()
+
+// Anchor on OUR register call: the slot name and our entry id must appear as
+// adjacent fields of one registration object.
+const HEADER_SLOT = 'conversation.session.header.utilities'
+const anchored = new RegExp(
+  String.raw`inject\(\s*['"]${HEADER_SLOT.replaceAll('.', String.raw`\.`)}['"][\s\S]{0,400}?name:\s*['"]${HEADER_SLOT.replaceAll('.', String.raw`\.`)}['"],\s*id:\s*['"]easy-exit['"]`,
+)
+
+const checks = {
+  'bundle served': body.length > 1000,
+  '__ModuleLoader__.load': body.includes('__ModuleLoader__.load'),
+  'our package registered': /id:\s*['"]dsh-easy-exit['"]/.test(body),
+  [`own register into ${HEADER_SLOT}`]: anchored.test(body),
+  'exit route present': body.includes('/easy-exit/api'),
+  'locale dictionaries': body.includes('退出 DeepSeek Harness'),
+}
+
+for (const [label, ok] of Object.entries(checks)) {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`)
+}
 console.log('bundle bytes           :', body.length)
-console.log('__ModuleLoader__.load  :', body.includes('__ModuleLoader__.load'))
-console.log('registers dsh-easy-exit:', /id:\s*['"]dsh-easy-exit['"]/.test(body))
-console.log('slot sidebar.footer    :', body.includes('sidebar.footer.action'))
-console.log('exit route             :', body.includes('/easy-exit/api'))
-console.log('locale dictionaries    :', body.includes('退出 DeepSeek Harness'))
-process.exit(body.includes('sidebar.footer.action') ? 0 : 1)
+
+process.exit(Object.values(checks).every(Boolean) ? 0 : 1)

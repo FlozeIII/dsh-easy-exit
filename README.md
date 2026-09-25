@@ -108,12 +108,19 @@ fence rather than failing open.
 | `cordis.patch.yml` | bundle patch: inserts the `easy-exit` loader row |
 | `smoke.mjs` | host-half tests, no DSH runtime needed |
 | `e2e.mjs` | live test: token exchange → authenticated POST → server actually stopping |
-| `verify-client.mjs` | live test: the client bundle is served and carries the register call |
+| `verify-client.mjs` | live test: the served combo carries OUR register call (see the trap below) |
 
 The client half must be a **classic script** loaded through `window.__ModuleLoader__.load({ id, factory })` — no
 `import`/`export`, and `require` resolves only against the shell's frozen module table (React, Cordis, static UI
 libraries). It registers into the session-scoped `conversation.session.header.utilities` slot, whose occupants
 receive no owner props — hence the translate function arrives through the register inject factory.
+
+**Trap when checking a served bundle:** a browser row's combo script concatenates *every* plugin of that row, so a
+substring test for a slot name proves nothing. `@linxin666/dsh-remote-web-ui` registers the retired
+`sidebar.footer.action` seat, and its literal lands in the same body as ours — an assertion of the form
+`body.includes('sidebar.footer.action')` reports `true` for a bundle that does not contain our plugin's code at all.
+`verify-client.mjs` therefore anchors on our own registration object (slot name and entry id adjacent) rather than
+on any slot name appearing anywhere in the body.
 
 ## Install
 
