@@ -1,0 +1,7 @@
+# Normalize line endings so a Windows checkout does not rewrite every file.
+* text=auto eol=lf
+
+# Binary assets, if any are ever added.
+*.png binary
+*.jpg binary
+*.ico binary

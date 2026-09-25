@@ -1,0 +1,12 @@
+# Dependencies and local links
+node_modules/
+
+# Debug artifacts the plugin must never write
+trace.log
+
+# Editor and OS noise
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.swp

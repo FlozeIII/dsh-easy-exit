@@ -1,0 +1,4 @@
+# dsh-easy-exit bundle patch: inserts one loader row for this plugin.
+- insert:
+    - id: easy-exit
+      name: dsh-easy-exit

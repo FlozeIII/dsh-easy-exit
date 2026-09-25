@@ -1,0 +1,54 @@
+{
+  "name": "dsh-easy-exit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Conveniently shut down the dsh web server: a conversation-header exit button plus an agent tool, using the launcher's bounded shutdown path.",
+  "license": "MIT",
+  "author": "FlozeIII",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node smoke.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FlozeIII/dsh-easy-exit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/FlozeIII/dsh-easy-exit/issues"
+  },
+  "homepage": "https://github.com/FlozeIII/dsh-easy-exit#readme",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "exit",
+    "shutdown"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1 <5",
+    "@deepseek-ai/dsh-tools": ">=0.1.7-rc.2 <0.2.0"
+  }
+}
