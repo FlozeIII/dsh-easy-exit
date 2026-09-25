@@ -1,0 +1,47 @@
+name: publish
+
+# Publishes this package to the npm registry through trusted publishing (OIDC).
+#
+# No npm token is involved: npm detects the GitHub Actions environment, exchanges
+# the job's OIDC identity token for a short-lived registry credential, and the
+# registry matches it against the trusted publisher configured for this package
+# (see the Releasing section of the README). The only requirement on this side is
+# the `id-token: write` permission below.
+#
+# Started manually so a release is always an explicit act; add a tag trigger when
+# you want releases to run themselves.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      # setup-node's registry-url writes an .npmrc auth line; remove it so the
+      # publish is unambiguously authenticated by OIDC rather than by a token.
+      - name: Drop any token auth written by setup-node
+        run: |
+          if [ -f "$NPM_CONFIG_USERCONFIG" ]; then
+            grep -v '_authToken' "$NPM_CONFIG_USERCONFIG" > "$NPM_CONFIG_USERCONFIG.tmp" || true
+            mv "$NPM_CONFIG_USERCONFIG.tmp" "$NPM_CONFIG_USERCONFIG"
+          fi
+
+      - name: Show what will be published
+        run: |
+          node -e "const p=require('./package.json');console.log(p.name+'@'+p.version)"
+          ls -la
+
+      - name: Publish
+        run: npm publish --provenance --access public
