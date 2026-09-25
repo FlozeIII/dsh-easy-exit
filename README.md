@@ -141,24 +141,52 @@ mirror. Only the release itself must go to the registry of record; see [Releasin
 
 ## Releasing
 
-`npm publish` goes to whatever `registry` npm is configured with, and a mirror such as
-`https://registry.npmmirror.com/` is a read-through cache that rejects publishes. So publish to the registry of
-record explicitly, rather than trusting the local configuration:
-
-```sh
-npm login --registry=https://registry.npmjs.org/
-npm publish --registry=https://registry.npmjs.org/
-```
-
-`prepack` runs the test suite, so a failing suite blocks both `npm pack` and `npm publish` — verified by making the
-suite exit non-zero and watching `npm pack` propagate that exit code.
-
-After publishing, bump the version, commit, and tag:
+Releases go through **[trusted publishing](https://docs.npmjs.com/trusted-publishers)** from GitHub Actions, so no
+npm token is stored anywhere and no one-time code is typed:
 
 ```sh
 npm version patch --no-git-tag-version   # or minor / major
 git commit -am "chore: release x.y.z"
-git tag vx.y.z && git push --follow-tags
+git push
+# then: Actions -> publish -> Run workflow
+```
+
+The [publish workflow](.github/workflows/publish.yml) runs on `workflow_dispatch`; add a tag trigger if you want
+releases to start themselves. It needs `id-token: write`, and npm exchanges that OIDC identity for a short-lived
+registry credential. `--provenance` records a SLSA provenance statement in the transparency log.
+
+The trusted relationship is configured once per package, and it is an **account-level** action:
+
+```sh
+npm login --registry=https://registry.npmjs.org/
+npm trust github dsh-easy-exit --file publish.yml --repo <owner>/<repo> --allow-publish
+```
+
+That command needs an interactive browser authentication, so run it in a terminal and leave the window open while
+you confirm in the browser. Note who this authorises: anyone with write access to the repository can then publish.
+
+Three things cost a debugging session each, so they are recorded here:
+
+- **The workflow must install dependencies.** `npm publish` runs `prepack`, which runs the smoke suite, which imports
+  `@deepseek-ai/dsh-tools`; without `npm ci` the publish dies before authentication with `ERR_MODULE_NOT_FOUND`.
+- **The workflow must run a recent npm on a recent Node.** The Node 20 image ships npm 10.x, which cannot perform the
+  OIDC exchange and reports `ENEEDAUTH` even with `id-token: write` granted; npm 12 additionally requires
+  Node `^22.22.2 || ^24.15.0 || >=26`.
+- **A successful publish is not instantly downloadable.** npm answers `Your package is being processed and may take a
+  few minutes to become available`; the version metadata appeared in about 3 minutes here and the tarball a few
+  minutes after that. A 404 right after publishing is not a failure.
+
+A bypass-2FA granular token can still publish directly and is what the 0.1.0 release used, but npm is retiring that
+path for direct publishing (targeting January 2027), so it is not the route to build on.
+
+`prepack` runs the test suite, so a failing suite blocks `npm pack` and `npm publish` alike — verified by making the
+suite exit non-zero and watching `npm pack` propagate that exit code.
+
+Local publishing also needs the registry of record named explicitly, because a mirror such as
+`https://registry.npmmirror.com/` is a read-through cache that rejects publishes and lags behind new releases:
+
+```sh
+npm publish --registry=https://registry.npmjs.org/
 ```
 
 ## Install (development)
