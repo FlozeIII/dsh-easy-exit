@@ -118,15 +118,16 @@ receive no owner props — hence the translate function arrives through the regi
 ## Install
 
 ```sh
-# from npm
 dsh plugin --profile web add dsh-easy-exit
-
-# or straight from the repository
-dsh plugin --profile web add github:FlozeIII/dsh-easy-exit
 ```
 
 Restart `dsh web` afterwards: the host half mounts immediately, but the browser bundle is resolved when the package
 loads.
+
+> **Git installs are not offered on purpose.** npm 12 ships `allow-git=none`, so
+> `npm install github:<owner>/<repo>` fails with `EALLOWGIT: Fetching packages of type "git" have been disabled`.
+> Recommending that route would produce a broken install on a stock npm 12 setup. Install from the registry, or use
+> a `link:` checkout while developing.
 
 Users on a registry mirror should keep it — `dsh-easy-exit` is a plain public package and installs fine from a
 mirror. Only the release itself must go to the registry of record; see [Releasing](#releasing).
