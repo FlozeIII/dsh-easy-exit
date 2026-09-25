@@ -1,6 +1,6 @@
 # dsh-easy-exit
 
-[English](README.md) | 中文
+[English](../README.md) | 中文
 
 方便地关掉 `dsh web` 服务：一个**会话标题栏退出按钮**加一个 **agent 工具**，
 两者都接到启动器自己的有界停机路径上。
@@ -141,7 +141,7 @@ git push
 # 然后：Actions -> publish -> Run workflow
 ```
 
-[publish workflow](.github/workflows/publish.yml) 由 `workflow_dispatch` 触发；
+[publish workflow](../.github/workflows/publish.yml) 由 `workflow_dispatch` 触发；
 若希望发版自动开始，可加 tag 触发器。它需要 `id-token: write`，
 npm 会用这个 OIDC 身份换取短期有效的 registry 凭据。`--provenance` 会在透明度日志里记录 SLSA 来源证明。
 
@@ -208,7 +208,7 @@ npm ci
 npm test                        # 52 项宿主侧断言，不需要 DSH 运行时
 ```
 
-每次 push 都会通过 [test workflow](.github/workflows/test.yml) 运行 `npm test`。
+每次 push 都会通过 [test workflow](../.github/workflows/test.yml) 运行 `npm test`。
 
 实测检查需要一个**临时实例**——绝不要用你正在使用的那个：
 
