@@ -49,5 +49,18 @@ jobs:
           node -e "const p=require('./package.json');console.log(p.name+'@'+p.version)"
           ls -la
 
+      # OIDC only works when the job is granted `id-token: write`; without it
+      # ACTIONS_ID_TOKEN_REQUEST_URL is absent and npm falls back to "needs auth".
+      # Print the facts so a failure names its cause instead of being guessed at.
+      - name: Check the OIDC environment
+        run: |
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "ACTIONS_ID_TOKEN_REQUEST_URL: present"
+          else
+            echo "ACTIONS_ID_TOKEN_REQUEST_URL: MISSING - id-token: write was not granted"
+          fi
+          echo "npm version: $(npm --version)"
+          ls -la "$NPM_CONFIG_USERCONFIG" 2>/dev/null || echo "no user npmrc"
+
       - name: Publish
         run: npm publish --provenance --access public
