@@ -1,6 +1,6 @@
 {
   "name": "dsh-easy-exit",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Conveniently shut down the dsh web server: a conversation-header exit button plus an agent tool, using the launcher's bounded shutdown path.",
   "license": "MIT",
   "author": "FlozeIII",

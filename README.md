@@ -39,8 +39,13 @@ sidebar.
 The two-step confirmation exists because the exit is process-wide: it stops the server for every open tab and every
 session.
 
-Once the server is down the page loses its connection — that is the expected outcome. Close the tab. To start the
-server again, run the desktop launcher (`启动 DeepSeek Harness.cmd`).
+Once the server is down the plugin asks the browser to close the tab, so a successful exit usually takes the tab
+with it.
+
+That request is best-effort by browser policy: `window.close()` is honoured only for a window the page itself
+opened, and a tab opened from a shell or by the user is silently refused - no exception, no return value. So the
+button also switches to "The server has stopped. This page can be closed."; if the tab is still there, that note is
+why. To start the server again, run the desktop launcher (`启动 DeepSeek Harness.cmd`).
 
 ### 2. Running jobs stop the exit
 
