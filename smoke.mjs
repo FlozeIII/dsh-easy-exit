@@ -15,7 +15,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { apply, requestExit, name, TOOL_NAME, API_PATH, isTrustedApiRequest, rejectionFor, __resetExitSchedule } from './lib/index.js'
+import { apply, requestExit, name, TOOL_NAME, API_PATH, isTrustedApiRequest, rejectionFor, __resetExitSchedule, RESTART_EXIT_CODE } from './lib/index.js'
 
 let failures = 0
 const check = (label, ok, detail = '') => {
@@ -135,7 +135,7 @@ const makeReq = (overrides = {}) => ({
 {
   fresh()
   const calls = []
-  requestExit({ appExit: code => calls.push(code) }, true)
+  requestExit({ appExit: code => calls.push(code) }, { force: true })
   await tick()
   check('force path uses non-zero code', calls.length === 1 && calls[0] === 1, `calls=${JSON.stringify(calls)}`)
 }
@@ -172,7 +172,7 @@ const makeReq = (overrides = {}) => ({
   fresh()
   const calls = []
   const jobs = [{ id: 'bash-3', kind: 'tool-jobs', label: 'long task', status: 'stopping' }]
-  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } }, true)
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } }, { force: true })
   await tick()
   check('force overrides the job guard', result.route === 'appExit', result.route)
   check('force still exits with a non-zero code', calls.length === 1 && calls[0] === 1, JSON.stringify(calls))
@@ -289,6 +289,84 @@ const makeReq = (overrides = {}) => ({
   const result = requestExit(ctx)
   await tick()
   check('a sessionId-shaped session is honoured', result.route === 'blocked', result.route)
+}
+
+// --- restart ------------------------------------------------------------------
+{
+  fresh()
+  const calls = []
+  const result = requestExit({ appExit: code => calls.push(code) }, { restart: true })
+  await tick()
+  check('a restart uses the restart exit code', calls.length === 1 && calls[0] === RESTART_EXIT_CODE, JSON.stringify(calls))
+  check('the restart code is 75 (EX_TEMPFAIL)', RESTART_EXIT_CODE === 75, String(RESTART_EXIT_CODE))
+  check('a restart reports the restart route', result.route === 'restart', result.route)
+  check('a restart explains the launcher will start it again', /launcher will start it again/.test(String(result.message)), String(result.message).slice(0, 70))
+}
+
+{
+  fresh()
+  const calls = []
+  // A plain exit must not be mistaken for a restart.
+  const result = requestExit({ appExit: code => calls.push(code) })
+  await tick()
+  check('a plain exit is not a restart', result.route === 'appExit' && calls[0] === 0, `${result.route} ${JSON.stringify(calls)}`)
+}
+
+{
+  fresh()
+  const calls = []
+  // The guard covers restart too: relaunching kills running work just as surely.
+  const jobs = [{ id: 'bash-r', label: 'long build', status: 'running' }]
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } }, { restart: true })
+  await tick()
+  check('a running job blocks a restart', result.route === 'blocked', result.route)
+  check('the blocked restart mentions restarting', /restart/.test(String(result.message)), String(result.message).slice(-60))
+  check('a blocked restart requests nothing', calls.length === 0, JSON.stringify(calls))
+}
+
+{
+  fresh()
+  const calls = []
+  const jobs = [{ id: 'bash-f', label: 'long build', status: 'running' }]
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } }, { restart: true, force: true })
+  await tick()
+  check('force restarts despite running jobs', result.route === 'restart' && calls[0] === RESTART_EXIT_CODE, `${result.route} ${JSON.stringify(calls)}`)
+}
+
+{
+  // A carrier with no launcher exit request cannot carry the restart code, and
+  // the signal fallback must say so rather than promise a relaunch. A SIGINT
+  // listener absorbs the fallback so the test process survives long enough to
+  // observe it.
+  fresh()
+  let signalled = false
+  const realKill = process.kill
+  process.kill = () => { signalled = true; return true }
+  const result = requestExit({ get: () => undefined }, { restart: true })
+  check('a restart without appExit falls back to a signal', result.route === 'signal', result.route)
+  check('the signal fallback admits it cannot restart', /cannot carry the restart request/.test(String(result.message)), String(result.message).slice(0, 80))
+  await tick()
+  process.kill = realKill
+  check('the fallback really sent the signal', signalled === true, String(signalled))
+}
+
+{
+  // Through the route: restart is read from the body and answered 200.
+  const { route, calls } = mount({ admit: () => ({ peer: {} }) })
+  const res = makeRes()
+  await route.handler(makeReq({ body: JSON.stringify({ restart: true }) }), res)
+  await tick()
+  check('route accepts a restart from the body', res.state.status === 200 && calls[0] === RESTART_EXIT_CODE, `${res.state.status} ${JSON.stringify(calls)}`)
+  check('route reports the restart route', JSON.parse(res.state.body || '{}').route === 'restart', res.state.body)
+}
+
+{
+  // Through the tool: the restart parameter reaches requestExit.
+  const { tool, calls } = mount({ admit: () => ({ peer: {} }) })
+  const value = await tool.execute({ restart: true })
+  await tick()
+  check('the tool restarts with the restart code', calls[0] === RESTART_EXIT_CODE, JSON.stringify(calls))
+  check('the tool reports the restart route', value.route === 'restart', JSON.stringify(value).slice(0, 90))
 }
 
 // --- registration surface -----------------------------------------------------

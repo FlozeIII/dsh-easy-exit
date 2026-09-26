@@ -29,9 +29,16 @@ diagnose, so they are stated here explicitly:
 
 ### 1. The header button
 
-A power button (⏻) sits in the **conversation header's utilities seat** — on the right side of the session title
-bar, beside the shipped actions. It is visible on every session and needs neither a sidebar expansion nor the right
-sidebar.
+Two buttons sit in the **conversation header's utilities seat** — on the right side of the session title bar, beside
+the shipped actions. Both are visible on every session and need neither a sidebar expansion nor the right sidebar.
+
+| button | action |
+|---|---|
+| ⏻ | stop the server |
+| ⟳ | stop the server and let the launcher start it again |
+
+They are two buttons rather than one menu because the seat API offers no menu and the command surface cannot be
+opened programmatically from a button, so a single control could not offer the choice.
 
 - **First click** arms it: the button turns red and expands to "Confirm exit / 确认退出" for 5 seconds.
 - **Second click** within that window shuts the server down; an unanswered first click simply expires.
@@ -60,7 +67,20 @@ This is the point of the guard: a shutdown takes every running job with it, and 
 mis-click is worse than not having a button. Waiting is the default; `force` — an explicit second gesture — is the
 only way to discard that work.
 
-### 3. The `/exit` slash command
+### 3. Restart
+
+The ⟳ button stops the server and the **desktop launcher starts it again in the same window**. It asks for that by
+exiting with a conventional code (75, `EX_TEMPFAIL`; the launcher declares it through
+`DSH_EASY_EXIT_RESTART_CODE`), which the launcher recognises and loops on.
+
+The plugin never spawns the replacement process itself. That is deliberate: one process owning the port handover
+means there is no window in which two servers race for it. The consequence is that a restart needs the desktop
+launcher — a server started some other way simply stops, which is the safe reading of an unrecognised exit code.
+
+The tab stays open through a restart: the page reconnects by itself once the server is back. The running-job guard
+covers a restart too, because relaunching takes running work with it just as surely as stopping does.
+
+### 4. The `/exit` slash command
 
 Typing `/exit` opens the command popup with one row, "Shut down the dsh web server". Picking it raises the shared
 popup shell's own risk gate (`Shut down dsh web?`) instead of exiting immediately, so the destructive step always
@@ -69,7 +89,7 @@ takes a second, deliberate gesture. The running-job guard applies here too.
 This seat is optional: it registers only when the client command surface is available. The header button never
 depends on it.
 
-### 4. The agent tool
+### 5. The agent tool
 
 The host half registers `shutdown_dsh_web`, so you can simply ask:
 
@@ -77,7 +97,9 @@ The host half registers `shutdown_dsh_web`, so you can simply ask:
 
 | parameter | type | default | meaning |
 |---|---|---|---|
-| `force` | boolean | `false` | stop even though jobs are still running, and use the force-exit path with a non-zero exit code |
+| estart | boolean | `false` | start the server again after stopping it, instead of leaving it stopped |
+| `restart` | boolean | `false` | start the server again after stopping it, instead of leaving it stopped |
+| `force` | boolean | `false` | stop or restart even though jobs are still running |
 
 Without `force` the tool refuses while jobs run and reports which ones, so an agent cannot discard running work by
 accident; with it, the same second gesture the button needs. The tool schedules the exit **after** its result is
@@ -235,7 +257,7 @@ it is a `peerDependency` for consumers and a `devDependency` here).
 
 ```powershell
 npm ci
-npm test                        # 86 host-half assertions, no DSH runtime needed
+npm test                        # 102 host-half assertions, no DSH runtime needed
 ```
 
 `npm test` runs on every push through the [test workflow](.github/workflows/test.yml).
