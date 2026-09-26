@@ -235,7 +235,7 @@ it is a `peerDependency` for consumers and a `devDependency` here).
 
 ```powershell
 npm ci
-npm test                        # 84 host-half assertions, no DSH runtime needed
+npm test                        # 86 host-half assertions, no DSH runtime needed
 ```
 
 `npm test` runs on every push through the [test workflow](.github/workflows/test.yml).

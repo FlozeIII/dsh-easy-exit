@@ -223,7 +223,7 @@ dsh plugin --profile web add "link:D:\dev\dsh-easy-exit"
 
 ```powershell
 npm ci
-npm test                        # 84 项宿主侧断言，不需要 DSH 运行时
+npm test                        # 86 项宿主侧断言，不需要 DSH 运行时
 ```
 
 每次 push 都会通过 [test workflow](../.github/workflows/test.yml) 运行 `npm test`。

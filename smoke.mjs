@@ -445,12 +445,12 @@ const makeReq = (overrides = {}) => ({
 const clientChecks = []
 {
   const source = readFileSync(new URL('./lib/client.js', import.meta.url), 'utf8')
-  const body = source.match(/async function shutdownAccepted\(response\) \{[\s\S]*?\n    \}/)
+  const body = source.match(/async function readReply\(response\) \{[\s\S]*?\n    \}/)
   check('the client decision function is present', body !== null)
 
-  const shutdownAccepted = body === null
-    ? async () => false
-    : new Function('return ' + body[0].replace('async function shutdownAccepted', 'async function f'))()
+  const readReply = body === null
+    ? async () => ({ accepted: false })
+    : new Function('return ' + body[0].replace('async function readReply', 'async function f'))()
 
   const reply = (status, payload) => ({
     status,
@@ -459,16 +459,28 @@ const clientChecks = []
       return payload
     },
   })
+  const accepted = async response => (await readReply(response)).accepted
 
   clientChecks.push(
-    ['no reply counts as accepted (the tree is disposing)', shutdownAccepted(undefined), true],
-    ['an accepted reply closes the tab', shutdownAccepted(reply(200, { ok: true, route: 'appExit' })), true],
-    ['a signal reply closes the tab', shutdownAccepted(reply(200, { ok: true, route: 'signal' })), true],
-    ['the job refusal does NOT close the tab', shutdownAccepted(reply(409, { ok: false, route: 'blocked' })), false],
-    ['the duplicate refusal does NOT close the tab', shutdownAccepted(reply(409, { ok: false, route: 'duplicate' })), false],
-    ['an unreadable reply does NOT close the tab', shutdownAccepted(reply(200, undefined)), false],
-    ['an unauthorised reply does NOT close the tab', shutdownAccepted(reply(401, { ok: false })), false],
+    ['no reply counts as accepted (the tree is disposing)', accepted(undefined), true],
+    ['an accepted reply closes the tab', accepted(reply(200, { ok: true, route: 'appExit' })), true],
+    ['a signal reply closes the tab', accepted(reply(200, { ok: true, route: 'signal' })), true],
+    ['the job refusal does NOT close the tab', accepted(reply(409, { ok: false, route: 'blocked' })), false],
+    ['the duplicate refusal does NOT close the tab', accepted(reply(409, { ok: false, route: 'duplicate' })), false],
+    ['an unreadable reply does NOT close the tab', accepted(reply(200, undefined)), false],
+    ['an unauthorised reply does NOT close the tab', accepted(reply(401, { ok: false })), false],
   )
+
+  // The refusal text and job list must survive the parse, so the button can say
+  // which work is holding the shutdown up.
+  const refused = await readReply(reply(409, {
+    ok: false,
+    route: 'blocked',
+    message: '1 job is still working: long build (running).',
+    jobs: [{ id: 'pwsh-1', label: 'long build', status: 'running' }],
+  }))
+  check('a refusal carries the host message', String(refused.message).includes('long build'), String(refused.message))
+  check('a refusal carries the job list', refused.jobs?.[0]?.label === 'long build', JSON.stringify(refused.jobs))
 }
 
 for (const [label, promise, expected] of clientChecks) {
