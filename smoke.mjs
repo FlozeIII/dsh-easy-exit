@@ -39,14 +39,25 @@ const mount = (options = {}) => {
   const connection = options.admit === undefined ? undefined : { admit: options.admit }
   const webRuntime = { trustedHosts: options.trustedHosts ?? [] }
   const webServer = { register: route => { routes.push(route); return () => {} } }
+  const jobs = {
+    list: caller =>
+      options.jobsBySession === undefined
+        ? (options.jobs ?? [])
+        : (caller === undefined ? [] : (options.jobsBySession[caller] ?? [])),
+  }
+  const sessions = { list: () => options.sessions ?? [] }
   const ctx = {
     tools: { register: tool => registered.push(tool) },
     webRuntime,
+    jobs,
+    sessions,
     effect: callback => callback(),
     get: key => {
       if (key === 'appExit') return exit
       if (key === 'connection') return connection
       if (key === 'webRuntime') return webRuntime
+      if (key === 'jobs') return options.noJobs === true ? undefined : jobs
+      if (key === 'sessions') return options.noSessions === true ? undefined : sessions
       if (key === 'webServer') return options.noWebServer === true ? undefined : webServer
       return undefined
     },
@@ -138,6 +149,145 @@ const makeReq = (overrides = {}) => ({
   check('first request schedules the exit', first.route === 'appExit', first.route)
   check('second request is refused', second.route === 'duplicate', second.route)
   check('only one exit was requested', calls.length === 1 && calls[0] === 0, `calls=${JSON.stringify(calls)}`)
+}
+
+// --- the running-job guard ----------------------------------------------------
+{
+  fresh()
+  const calls = []
+  const jobs = [
+    { id: 'bash-1', kind: 'tool-jobs', label: 'npm run build', status: 'running' },
+    { id: 'bash-2', kind: 'tool-jobs', label: 'finished thing', status: 'completed' },
+  ]
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } })
+  await tick()
+  check('a running job blocks the exit', result.route === 'blocked', result.route)
+  check('the blocked result names the job', result.jobs?.length === 1 && result.jobs[0].id === 'bash-1', JSON.stringify(result.jobs))
+  check('the message mentions the job', String(result.message).includes('npm run build'), String(result.message).slice(0, 80))
+  check('a blocked exit requests nothing', calls.length === 0, JSON.stringify(calls))
+}
+
+{
+  fresh()
+  const calls = []
+  const jobs = [{ id: 'bash-3', kind: 'tool-jobs', label: 'long task', status: 'stopping' }]
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } }, true)
+  await tick()
+  check('force overrides the job guard', result.route === 'appExit', result.route)
+  check('force still exits with a non-zero code', calls.length === 1 && calls[0] === 1, JSON.stringify(calls))
+}
+
+{
+  fresh()
+  const calls = []
+  // Settled statuses must not block: only running/stopping are work in flight.
+  const jobs = [
+    { id: 'bash-4', label: 'done', status: 'completed' },
+    { id: 'bash-5', label: 'dead', status: 'killed' },
+    { id: 'bash-6', label: 'broke', status: 'failed' },
+  ]
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => jobs } })
+  await tick()
+  check('settled jobs do not block the exit', result.route === 'appExit', result.route)
+  check('settled jobs still exit gracefully', calls.length === 1 && calls[0] === 0, JSON.stringify(calls))
+}
+
+{
+  fresh()
+  const calls = []
+  const result = requestExit({ appExit: code => calls.push(code), jobs: { list: () => { throw new Error('registry down') } } })
+  await tick()
+  check('a throwing registry does not block the exit', result.route === 'appExit', result.route)
+  check('a throwing registry still exits', calls.length === 1 && calls[0] === 0, JSON.stringify(calls))
+}
+
+{
+  fresh()
+  const calls = []
+  const result = requestExit({ appExit: code => calls.push(code) })
+  await tick()
+  check('a context without jobs still exits', result.route === 'appExit', result.route)
+  check('no jobs service exits gracefully', calls.length === 1 && calls[0] === 0, JSON.stringify(calls))
+}
+
+{
+  // Through the route: a blocked shutdown is a 409 that carries the job list.
+  const { route, calls } = mount({ jobs: [{ id: 'bash-9', label: 'busy work', status: 'running' }], admit: () => ({ peer: {} }) })
+  const res = makeRes()
+  await route.handler(makeReq(), res)
+  await tick()
+  check('route answers 409 while jobs run', res.state.status === 409, `${res.state.status} ${res.state.body}`)
+  check('route reports the blocking job', JSON.parse(res.state.body || '{}').jobs?.[0]?.label === 'busy work', res.state.body)
+  check('route did not schedule an exit', calls.length === 0, JSON.stringify(calls))
+}
+
+{
+  // The regression that matters: the registry scopes list(caller) to
+  // caller-owned and unowned jobs, so a bare list() sees NOTHING that a session
+  // owns. This stub reproduces that exactly — the job is invisible to
+  // list() and visible only to list(sessionId) — and the guard must still find
+  // it by asking each live session.
+  fresh()
+  const calls = []
+  const SESSION = 'session-abc'
+  const ownedJob = { id: 'pwsh-1', kind: 'tool-jobs', label: 'long build', status: 'running', owner: SESSION }
+  const ctx = {
+    appExit: code => calls.push(code),
+    jobs: { list: caller => (caller === SESSION ? [ownedJob] : []) },
+    sessions: { list: () => [{ id: SESSION }] },
+  }
+  const result = requestExit(ctx)
+  await tick()
+  check('a session-owned job blocks the exit', result.route === 'blocked', `${result.route} ${JSON.stringify(result.jobs)}`)
+  check('the session-owned job is named', result.jobs?.[0]?.label === 'long build', JSON.stringify(result.jobs))
+  check('the blocked exit requested nothing', calls.length === 0, JSON.stringify(calls))
+}
+
+{
+  // The same shape reached the route: 409 with the job list, no exit scheduled.
+  const SESSION = 'session-xyz'
+  const ownedJob = { id: 'pwsh-2', kind: 'tool-jobs', label: 'owned work', status: 'running', owner: SESSION }
+  const { tool, calls } = mount({
+    admit: () => ({ peer: {} }),
+    jobsBySession: { [SESSION]: [ownedJob] },
+    sessions: [{ id: SESSION }],
+  })
+  const value = await tool.execute({})
+  await tick()
+  check('the tool refuses for a session-owned job', value.route === 'blocked' && value.ok === false, JSON.stringify(value).slice(0, 120))
+  check('the tool names the session-owned job', value.jobs?.[0]?.label === 'owned work', JSON.stringify(value.jobs))
+  check('the refused tool requested nothing', calls.length === 0, JSON.stringify(calls))
+}
+
+{
+  // A settled job owned by a session must not block.
+  fresh()
+  const calls = []
+  const SESSION = 'session-done'
+  const ctx = {
+    appExit: code => calls.push(code),
+    jobs: { list: caller => (caller === SESSION ? [{ id: 'pwsh-3', label: 'finished', status: 'completed', owner: SESSION }] : []) },
+    sessions: { list: () => [{ id: SESSION }] },
+  }
+  const result = requestExit(ctx)
+  await tick()
+  check('a settled session-owned job does not block', result.route === 'appExit', result.route)
+  check('a settled session-owned job still exits', calls.length === 1 && calls[0] === 0, JSON.stringify(calls))
+}
+
+{
+  // A store whose session shape uses sessionId rather than id still works.
+  fresh()
+  const calls = []
+  const SESSION = 'session-alt'
+  const ctx = {
+    appExit: code => calls.push(code),
+    jobs: { list: caller => (caller === SESSION ? [{ id: 'pwsh-4', label: 'alt shape', status: 'running', owner: SESSION }] : []) },
+    sessions: { list: () => [{ sessionId: SESSION }] },
+  }
+  const result = requestExit(ctx)
+  await tick()
+  check('a sessionId-shaped session is honoured', result.route === 'blocked', result.route)
 }
 
 // --- registration surface -----------------------------------------------------

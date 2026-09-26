@@ -37,14 +37,26 @@
 服务停掉后页面会掉连接——这是预期结果，关掉标签页即可。
 重新启动请运行桌面脚本（`启动 DeepSeek Harness.cmd`）。
 
-### 2. `/exit` 斜杠命令
+### 2. 有任务在跑时，退出会被拒绝
+
+只要还有后台任务在运行，退出就会**被拒绝**，并把它们列出来：
+
+```
+1 job is still working: long build (running). Stopping the server now would kill
+that work. Wait for it to finish, or ask again with force to stop anyway.
+```
+
+这正是这道守卫的意义：停服会**连带杀掉所有运行中的任务**，而因为误点丢掉一个构建或一次测试，
+比没有这个按钮更糟。默认是**等它跑完**；`force` —— 一个明确的第二个动作 —— 才是唯一能丢弃这些工作的方式。
+
+### 3. `/exit` 斜杠命令
 
 输入 `/exit` 会打开命令弹窗，只有一行"关闭 dsh web 服务"。选中它**不会立即退出**，
 而是弹出共享弹窗自带的风险确认（"确定关闭 dsh web？"），所以这一步永远需要第二个明确动作。
 
 这个入口是**可选**的：只有当客户端的命令能力可用时才注册。按钮不依赖它。
 
-### 3. agent 工具
+### 4. agent 工具
 
 宿主侧注册了 `shutdown_dsh_web`，所以你可以直接说：
 
@@ -52,8 +64,10 @@
 
 | 参数 | 类型 | 默认 | 含义 |
 |---|---|---|---|
-| `force` | boolean | `false` | 升级为强制退出路径，并返回非零退出码 |
+| `force` | boolean | `false` | 即使仍有任务在跑也退出，并使用强制退出路径、返回非零退出码 |
 
+不带 `force` 时，只要有任务在跑，工具就会拒绝并报告是哪些任务，所以 agent 不会误丢正在运行的工作；
+带 `force` 时，等同于按钮所需的同一个"第二个动作"。
 工具会**先返回结果，再安排退出**（延迟 250 毫秒），所以回答不会被"进程中途停下"截断。
 
 ## 停机是怎么实现的
@@ -205,7 +219,7 @@ dsh plugin --profile web add "link:D:\dev\dsh-easy-exit"
 
 ```powershell
 npm ci
-npm test                        # 52 项宿主侧断言，不需要 DSH 运行时
+npm test                        # 76 项宿主侧断言，不需要 DSH 运行时
 ```
 
 每次 push 都会通过 [test workflow](../.github/workflows/test.yml) 运行 `npm test`。
@@ -225,6 +239,7 @@ node verify-client.mjs 3099 "<token>"   # 客户端 bundle 携带本插件的注
 ## 已知限制
 
 - 退出是**进程级**的：它会停掉每一个已打开的浏览器标签页和每一个会话，不只是你自己的。
+- 任务守卫会**按活跃会话逐个查询**任务注册表，因为 `list(caller)` 按设计就是会话作用域的，裸 `list()` 看不到会话拥有的任务。不属于任何活跃会话的任务仍能看到；但载体若没有 sessions 服务，就只能看到无主任务。
 - 浏览器无法关闭不是它自己打开的标签页，所以按钮只能告诉你"服务已停止"，标签页需要你自己关。
 - `inject` 刻意只列了 `tools`，因此工具在任何 profile 里都会加载。HTTP 路由通过
   `ctx.inject(['webServer','webRuntime'], …)` 挂载，会等到这些服务存在才加载

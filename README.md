@@ -42,16 +42,29 @@ session.
 Once the server is down the page loses its connection — that is the expected outcome. Close the tab. To start the
 server again, run the desktop launcher (`启动 DeepSeek Harness.cmd`).
 
-### 2. The `/exit` slash command
+### 2. Running jobs stop the exit
+
+While background jobs are still working the exit is **refused**, and the reply names them:
+
+```
+1 job is still working: long build (running). Stopping the server now would kill
+that work. Wait for it to finish, or ask again with force to stop anyway.
+```
+
+This is the point of the guard: a shutdown takes every running job with it, and losing a build or a test run to a
+mis-click is worse than not having a button. Waiting is the default; `force` — an explicit second gesture — is the
+only way to discard that work.
+
+### 3. The `/exit` slash command
 
 Typing `/exit` opens the command popup with one row, "Shut down the dsh web server". Picking it raises the shared
 popup shell's own risk gate (`Shut down dsh web?`) instead of exiting immediately, so the destructive step always
-takes a second, deliberate gesture.
+takes a second, deliberate gesture. The running-job guard applies here too.
 
 This seat is optional: it registers only when the client command surface is available. The header button never
 depends on it.
 
-### 3. The agent tool
+### 4. The agent tool
 
 The host half registers `shutdown_dsh_web`, so you can simply ask:
 
@@ -59,10 +72,11 @@ The host half registers `shutdown_dsh_web`, so you can simply ask:
 
 | parameter | type | default | meaning |
 |---|---|---|---|
-| `force` | boolean | `false` | escalate to the force-exit path with a non-zero exit code |
+| `force` | boolean | `false` | stop even though jobs are still running, and use the force-exit path with a non-zero exit code |
 
-The tool schedules the exit **after** its result is returned (a 250 ms delay), so the answer is not truncated by the
-process stopping mid-response.
+Without `force` the tool refuses while jobs run and reports which ones, so an agent cannot discard running work by
+accident; with it, the same second gesture the button needs. The tool schedules the exit **after** its result is
+returned (a 250 ms delay), so the answer is not truncated by the process stopping mid-response.
 
 ## How the shutdown works
 
@@ -216,7 +230,7 @@ it is a `peerDependency` for consumers and a `devDependency` here).
 
 ```powershell
 npm ci
-npm test                        # 52 host-half assertions, no DSH runtime needed
+npm test                        # 76 host-half assertions, no DSH runtime needed
 ```
 
 `npm test` runs on every push through the [test workflow](.github/workflows/test.yml).
@@ -236,6 +250,9 @@ the admission gate, the trust fence, and the route's status codes.
 ## Limitations
 
 - The exit is **process-wide**: it stops the server for every open browser tab and every session, not just yours.
+- The running-job guard asks the job registry once per **live session**, because `list(caller)` is session-scoped by
+  design and a bare `list()` cannot see session-owned work. A job that no live session owns still shows up, but a
+  carrier without a sessions service falls back to unowned jobs only.
 - A browser cannot close a tab it did not open, so the button can only report that the server stopped; close the tab
   yourself.
 - `inject` deliberately lists only `tools`, so the tool loads in every profile. The HTTP route is mounted through
