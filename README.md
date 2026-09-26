@@ -77,6 +77,10 @@ The plugin never spawns the replacement process itself. That is deliberate: one 
 means there is no window in which two servers race for it. The consequence is that a restart needs the desktop
 launcher — a server started some other way simply stops, which is the safe reading of an unrecognised exit code.
 
+The request travels in the query string (`POST /easy-exit/api?restart=1`) rather than the request body. That is not a
+style choice: the live web carrier was measured to ignore a restart flag sent in the body while honouring the same
+flag in the query string, so the query string is the signal that actually arrives.
+
 The tab stays open through a restart: the page reconnects by itself once the server is back. The running-job guard
 covers a restart too, because relaunching takes running work with it just as surely as stopping does.
 
@@ -257,7 +261,7 @@ it is a `peerDependency` for consumers and a `devDependency` here).
 
 ```powershell
 npm ci
-npm test                        # 102 host-half assertions, no DSH runtime needed
+npm test                        # 104 host-half assertions, no DSH runtime needed
 ```
 
 `npm test` runs on every push through the [test workflow](.github/workflows/test.yml).

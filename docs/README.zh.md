@@ -69,6 +69,9 @@ that work. Wait for it to finish, or ask again with force to stop anyway.
 **插件自己绝不创建替换进程**，这是刻意的：让"端口交接"只由一个进程负责，就不存在两个服务抢端口的窗口期。
 代价是重启依赖桌面启动脚本——用别的方式启动的服务遇到这个退出码只会停止（这是对未知退出码最安全的解读）。
 
+该请求通过**查询串**传递（`POST /easy-exit/api?restart=1`），而不是请求体。这不是风格选择：
+实测发现线上 web 载体**会忽略放在请求体里的 restart 标志**，而同一个标志放在查询串里则被正确接受。
+
 重启期间**标签页保持打开**，服务回来后页面会自行重连。运行中任务守卫同样覆盖重启——
 因为重启和停止一样会带走正在运行的工作。
 
@@ -243,7 +246,7 @@ dsh plugin --profile web add "link:D:\dev\dsh-easy-exit"
 
 ```powershell
 npm ci
-npm test                        # 102 项宿主侧断言，不需要 DSH 运行时
+npm test                        # 104 项宿主侧断言，不需要 DSH 运行时
 ```
 
 每次 push 都会通过 [test workflow](../.github/workflows/test.yml) 运行 `npm test`。

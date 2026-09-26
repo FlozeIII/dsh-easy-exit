@@ -351,13 +351,35 @@ const makeReq = (overrides = {}) => ({
 }
 
 {
-  // Through the route: restart is read from the body and answered 200.
+  // Through the route: a restart is asked for with the query string, which is
+  // the carrier-independent signal. Measured, not assumed: the live web carrier
+  // ignored a restart flag sent in the request body while honouring the same
+  // flag in the query string, so this is the path that must keep working.
   const { route, calls } = mount({ admit: () => ({ peer: {} }) })
   const res = makeRes()
-  await route.handler(makeReq({ body: JSON.stringify({ restart: true }) }), res)
+  await route.handler(makeReq({ url: '/easy-exit/api?restart=1' }), res)
   await tick()
-  check('route accepts a restart from the body', res.state.status === 200 && calls[0] === RESTART_EXIT_CODE, `${res.state.status} ${JSON.stringify(calls)}`)
-  check('route reports the restart route', JSON.parse(res.state.body || '{}').route === 'restart', res.state.body)
+  check('route restarts from the query string', res.state.status === 200 && calls[0] === RESTART_EXIT_CODE, `${res.state.status} ${JSON.stringify(calls)}`)
+  check('query-string restart reports the restart route', JSON.parse(res.state.body || '{}').route === 'restart', res.state.body)
+}
+
+{
+  // A lookalike query value must not count as a restart, and a plain request
+  // must not either.
+  const { route, calls } = mount({ admit: () => ({ peer: {} }) })
+  const res = makeRes()
+  await route.handler(makeReq({ url: '/easy-exit/api?restart=0' }), res)
+  await tick()
+  check('restart=0 is not a restart', JSON.parse(res.state.body || '{}').route === 'appExit' && calls[0] === 0, `${res.state.body} ${JSON.stringify(calls)}`)
+}
+
+{
+  // The body is still honoured when it arrives: `force` rides with it.
+  const { route, calls } = mount({ admit: () => ({ peer: {} }) })
+  const res = makeRes()
+  await route.handler(makeReq({ body: JSON.stringify({ force: true }) }), res)
+  await tick()
+  check('force still arrives from the body', calls[0] === 1, JSON.stringify(calls))
 }
 
 {
