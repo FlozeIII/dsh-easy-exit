@@ -14,6 +14,7 @@
  * Run: node smoke.mjs
  */
 
+import { readFileSync } from 'node:fs'
 import { apply, requestExit, name, TOOL_NAME, API_PATH, isTrustedApiRequest, rejectionFor, __resetExitSchedule } from './lib/index.js'
 
 let failures = 0
@@ -433,6 +434,46 @@ const makeReq = (overrides = {}) => ({
     isTrustedApiRequest({ headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' } }, []))
   check('fence rejects cross-site fetch metadata',
     !isTrustedApiRequest({ headers: { host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site' } }, []))
+}
+
+// --- the client's decision to close the tab -----------------------------------
+// The bug this guards: `fetch` resolves on HTTP 409, so closing the tab
+// unconditionally after the request hid a refused shutdown — the tab went away
+// while the server stayed up, which reads exactly like a successful exit. The
+// decision function is lifted out of the classic-script bundle (a factory body,
+// so it cannot be imported) and exercised directly.
+const clientChecks = []
+{
+  const source = readFileSync(new URL('./lib/client.js', import.meta.url), 'utf8')
+  const body = source.match(/async function shutdownAccepted\(response\) \{[\s\S]*?\n    \}/)
+  check('the client decision function is present', body !== null)
+
+  const shutdownAccepted = body === null
+    ? async () => false
+    : new Function('return ' + body[0].replace('async function shutdownAccepted', 'async function f'))()
+
+  const reply = (status, payload) => ({
+    status,
+    json: async () => {
+      if (payload === undefined) throw new Error('invalid json')
+      return payload
+    },
+  })
+
+  clientChecks.push(
+    ['no reply counts as accepted (the tree is disposing)', shutdownAccepted(undefined), true],
+    ['an accepted reply closes the tab', shutdownAccepted(reply(200, { ok: true, route: 'appExit' })), true],
+    ['a signal reply closes the tab', shutdownAccepted(reply(200, { ok: true, route: 'signal' })), true],
+    ['the job refusal does NOT close the tab', shutdownAccepted(reply(409, { ok: false, route: 'blocked' })), false],
+    ['the duplicate refusal does NOT close the tab', shutdownAccepted(reply(409, { ok: false, route: 'duplicate' })), false],
+    ['an unreadable reply does NOT close the tab', shutdownAccepted(reply(200, undefined)), false],
+    ['an unauthorised reply does NOT close the tab', shutdownAccepted(reply(401, { ok: false })), false],
+  )
+}
+
+for (const [label, promise, expected] of clientChecks) {
+  const actual = await promise
+  check(label, actual === expected, `got ${actual}`)
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
