@@ -544,7 +544,15 @@ const makeReq = (overrides = {}) => ({
 // so it cannot be imported) and exercised directly.
 const clientChecks = []
 {
-  const source = readFileSync(new URL('./lib/client.js', import.meta.url), 'utf8')
+  // The button must come back after a restart. Leaving it in `stopping` left it
+  // disabled, dimmed and stuck on "Restarting the server…" once the server was
+  // up again, because disabled and opacity are bound to that phase.
+  const buttonSource = readFileSync(new URL('./lib/client.js', import.meta.url), 'utf8')
+  check('a restart reaches its own phase', /setPhase\('restarting'\)/.test(buttonSource))
+  check('the restart phase returns to idle', /RESTART_SETTLE_MS\)/.test(buttonSource) && /setPhase\('restarting'\)[\s\S]{0,400}setPhase\('idle'\)/.test(buttonSource))
+  check('only the stopping phase disables the button', /disabled: stopping,/.test(buttonSource))
+  check('the restart phase is not dimmed', /opacity: stopping \|\| stopped \? 0\.6 : 1/.test(buttonSource))
+    const source = readFileSync(new URL('./lib/client.js', import.meta.url), 'utf8')
   const body = source.match(/async function readReply\(response\) \{[\s\S]*?\n    \}/)
   check('the client decision function is present', body !== null)
 
